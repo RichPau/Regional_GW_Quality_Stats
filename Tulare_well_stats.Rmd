@@ -1,5 +1,5 @@
 ---
-title: "Regional Groundwater Quality Trends in the Tulare Basin"
+title: "Regional Groundwater Quality Trends in California's Tulare Basin"
 author: "Rich Pauloo"
 date: "August 22, 2017"
 output: 
@@ -262,7 +262,7 @@ ggplot(boundary_dat) +
 ```
 
 ### Prepare Basemaps Maps for Next Sections
-```{r, warning = FALSE, message = FALSE, results = "hide"}
+```{r, warning = FALSE, message = FALSE, results = "hide", error = FALSE}
 library(maps)
 library(mapdata)
 
@@ -272,11 +272,40 @@ ca_county <- subset(counties, region == "california")
 tulare <- ca_county %>% 
   filter(subregion %in% c('fresno', 'kern', 'kings', 'tulare'))
 
+center_coords <- tulare %>% 
+  group_by(subregion) %>% 
+  dplyr::summarise(lat = median(lat), long = median(long)) %>% 
+  mutate(county = c('Fresno', 'Kern', 'Kings', 'Tulare'))
+
 # create dataframe with coordinates for Fresno and Bakersfield, to act as markers
-cities <- data.frame(city = c('Fresno', 'Bakersfield'),
-                     longitude = c(-119.7726, -119.0187), 
-                     latitude = c(36.7468, 35.3733)
+cities <- data.frame(city = c('Fresno', 'Bakersfield', 'Visalia'),
+                     longitude = c(-119.7726, -119.0187, -119.2921), 
+                     latitude = c(36.7468, 35.3733, 36.3302)
                      )
+
+# load Bulletin 118 GW basin shapfiles
+library(rgdal)
+library(maptools)
+filename <- "/Users/richpauloo/Documents/GitHub/Regional_GW_Quality_Stats/B118_GW_Basins/I08_B118_CA_GroundwaterBasins.shp"
+s <- shapefile(filename)
+
+# get tulare basin and other gw basins
+library(spdplyr)
+tulare_alluvial <- s %>% 
+  filter(Basin_ID == '5-22') %>% 
+  arrange(Basin_Subb)
+tulare_alluvial <- tulare_alluvial[8:14, ]
+
+# string of subbasin names for subsetting
+sbs <- c(paste('5', paste('0', 1:9, sep=""), sep="-"), paste('5', 10:22, sep="-"))
+
+other_cv_basins <- s %>% 
+  filter(Basin_ID %in% sbs & !is.na(Subbasin_N)) %>% 
+  filter(Basin_Subb != '5-12.01' & Basin_Subb != '5-12.02' & Basin_Subb != '5-02.01' & Basin_Subb != '5-02.02' & Basin_Subb != '5-01.01' & Basin_Subb != '5-01.02')
+
+# projections....
+tulare_alluvial <- spTransform(tulare_alluvial, CRS("+proj=longlat +ellps=GRS80 +datum=NAD83 +no_defs +towgs84=0,0,0"))
+other_cv_basins <- spTransform(other_cv_basins, CRS("+proj=longlat +ellps=GRS80 +datum=NAD83 +no_defs +towgs84=0,0,0"))
 
 # get California points from maps
 states <- map_data("state")
@@ -285,17 +314,30 @@ ca_df <- subset(states, region == "california")
 # first plot the base
 ca_base <- ggplot(data = ca_df, mapping = aes(x = long, y = lat, group = group)) + 
   coord_fixed(1.3) + 
-  geom_polygon(color = "black", fill = "gray") +
-  geom_polygon(data = tulare, fill = NA, color = 'blue') +
+  geom_polygon(color = "black", fill = "white") +
+  geom_polygon(data = other_cv_basins , aes(x = long, y = lat, group = group), color = 'black', fill = 'white') +
+  geom_polygon(data = tulare_alluvial, fill = "cornsilk2", color = 'black') +
   theme_void()
 
-tulare_base <- ggplot(data = tulare, mapping = aes(x = long, y = lat, group = group)) + 
+tulare_base <- ggplot() + 
   coord_fixed(1.3) + 
-  geom_polygon(color = "blue", fill = "gray") +
+  geom_polygon(data = tulare_alluvial, aes(x = long, y = lat, group = group), color = "black", fill = "cornsilk2") +
   theme_void()
+
+tulare_base_cities <- ggplot() + 
+  coord_fixed(1.3) + 
+  geom_polygon(data = tulare_alluvial, aes(x = long, y = lat, group = group), color = "black", fill = "cornsilk2") +
+  geom_point(data = cities, aes(x = longitude, y = latitude)) +
+  geom_text(data = cities, aes(x = longitude, y = latitude, label = city), vjust = 0, nudge_y = -0.1, nudge_x = -0.1) +
+  theme_void()
+
+# pull out coords of tulare_alluvial for annotations
+tulare_coords <- tulare_alluvial@polygons[[2]]@Polygons[[1]]@coords
+min_x <- min(tulare_coords[,1])
+min_y <- min(tulare_coords[,2])
 
 # plot California and Tulare together
-multiplot(ca_base, tulare_base, cols = 2)
+multiplot(ca_base, tulare_base_cities, cols = 2)
 ```
 
 ### Examine All Shallow and Deep Well Data
@@ -312,11 +354,11 @@ unique_shallow <- all_shallow[!duplicated(all_shallow$Well_ID), ] # subsets for 
 map_unique_shallow <- tulare_base +
   geom_point(data = unique_shallow, aes(x = Longitude, y = Latitude, group = Well_ID, color = has_depth_data), size = .5) +
   geom_point(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city))) +
-  geom_text(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city), label = city), hjust = 0, vjust = -.5) + 
-  theme(legend.position= c(0.25, 0.9)) +
+  geom_text(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city), label = city), vjust = 0, nudge_y = -0.1, nudge_x = -0.1) + 
+  theme(legend.position= c(0.16, 0.15)) +
   labs(caption = "(a)") + 
   annotate("text", 
-           x = min(unique_shallow$Longitude), y = min(unique_shallow$Latitude), 
+           x = min_x + .1, y = min_y -.1, 
            label = paste("n = ", length(unique_shallow$Well_ID))
            ) +
   theme(plot.margin = unit(c(0,.5,0,0), "cm"))
@@ -369,15 +411,15 @@ all_deep <- dat %>%
 # unique shallow well observations
 unique_deep <- all_deep[!duplicated(all_deep$Well_ID), ] # subsets for all unique Well_ID
 
-# map of unique shallow wells
+# map of unique deep wells
 map_unique_deep <- tulare_base +
   geom_point(data = unique_deep, aes(x = Longitude, y = Latitude, group = Well_ID, color = has_depth_data), size = .5) +
   geom_point(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city))) +
-  geom_text(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city), label = city), hjust = 0, vjust = -.5) + 
-  theme(legend.position= c(0.25, 0.9)) +
+  geom_text(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city), label = city), vjust = 0, nudge_y = -0.1, nudge_x = -0.1) + 
+  theme(legend.position= c(0.16, 0.15)) +
   labs(caption = "(a)") + 
   annotate("text", 
-           x = min(unique_deep$Longitude), y = min(unique_deep$Latitude), 
+           x = min_x + .15, y = min_y - .1, 
            label = paste("n = ", length(unique_deep$Well_ID))
            ) +
   theme(plot.margin = unit(c(0,.5,0,0), "cm"))
@@ -454,10 +496,10 @@ map_shallow_continuous <- tulare_base +
   geom_point(data = shallow_continuous_early, aes(x = Longitude, y = Latitude, group = Well_ID), size = .5, color = 'red', alpha = 1/5) +
   geom_point(data = shallow_continuous_late, aes(x = Longitude, y = Latitude, group = Well_ID), size = .5, color = 'red', alpha = 1/5) +
   geom_point(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city))) +
-  geom_text(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city), label = city), hjust = 0, vjust = -.5) +
+  geom_text(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city), label = city), vjust = 0, nudge_y = -0.1, nudge_x = -0.1) +
   labs(caption = "(a)") + 
   annotate("text", 
-           x = min(unique_deep$Longitude), y = min(unique_deep$Latitude), 
+           x = min_x + .1, y = min_y - .1, 
            label = paste("n = ", as.character(
              length(unique(shallow_continuous_early$Well_ID)) + 
              length(unique(shallow_continuous_late$Well_ID))), sep = "")) +
@@ -505,10 +547,10 @@ map_shallow_discontinuous <- tulare_base +
   geom_point(data = shallow_discontinuous_middle, aes(x = Longitude, y = Latitude, group = Well_ID), size = .5, color = 'red', alpha = 1/5) +
   geom_point(data = shallow_discontinuous_late, aes(x = Longitude, y = Latitude, group = Well_ID), size = .5, color = 'red', alpha = 1/5) +
   geom_point(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city))) +
-  geom_text(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city), label = city), hjust = 0, vjust = -.5) +
+  geom_text(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city), label = city), vjust = 0, nudge_y = -0.1, nudge_x = -0.1) +
   labs(caption = "(a)") +
   annotate("text", 
-           x = min(unique_deep$Longitude), y = min(unique_deep$Latitude), 
+           x = min_x + .1, y = min_y - .1, 
            label = paste("n = ", as.character(
              length(unique(shallow_discontinuous_early$Well_ID)) +
              length(unique(shallow_discontinuous_middle$Well_ID)) +
@@ -554,10 +596,10 @@ map_deep_continuous <- tulare_base +
   geom_point(data = deep_continuous_early, aes(x = Longitude, y = Latitude, group = Well_ID), size = .5, color = 'red', alpha = 1/5) +
   geom_point(data = deep_continuous_late, aes(x = Longitude, y = Latitude, group = Well_ID), size = .5, color = 'red', alpha = 1/5) +
   geom_point(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city))) +
-  geom_text(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city), label = city), hjust = 0, vjust = -.5) +
+  geom_text(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city), label = city), vjust = 0, nudge_y = -0.1, nudge_x = -0.1) +
   labs(caption = "(a)") +
   annotate("text", 
-           x = min(unique_deep$Longitude), y = min(unique_deep$Latitude),
+           x = min_x + .1, y = min_y - .1,
            label = paste("n = ", as.character(
              length(unique(deep_continuous_early$Well_ID)) +
              length(unique(deep_continuous_late$Well_ID))), sep = "")) +
@@ -599,10 +641,10 @@ map_deep_discontinuous <- tulare_base +
   geom_point(data = deep_discontinuous_early, aes(x = Longitude, y = Latitude, group = Well_ID), size = .5, color = 'red', alpha = 1/5) +
   geom_point(data = deep_discontinuous_late, aes(x = Longitude, y = Latitude, group = Well_ID), size = .5, color = 'red', alpha = 1/5) +
   geom_point(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city))) +
-  geom_text(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city), label = city), hjust = 0, vjust = -.5) +
+  geom_text(data = cities, mapping = aes(x = longitude, y = latitude, group = factor(city), label = city), vjust = 0, nudge_y = -0.1, nudge_x = -0.1) +
   labs(caption = "(a)") +
   annotate("text", 
-           x = min(unique_deep$Longitude), y = min(unique_deep$Latitude),
+           x = min_x + .1, y = min_y - .1,
            label = paste("n = ", as.character(
              length(unique(deep_discontinuous_late$Well_ID)) +
              length(unique(deep_discontinuous_early$Well_ID))), sep = "")) +
@@ -612,6 +654,13 @@ map_deep_discontinuous <- tulare_base +
 ***
 
 # Results
+
+### Study Area
+```{r, warning = FALSE, message = FALSE, results = "hide", echo = FALSE}
+multiplot(ca_base, tulare_base_cities, cols = 2)
+```
+
+***
 
 ### Shallow Wells
 ```{r, warning = FALSE, message = FALSE, results = "hide", echo = FALSE}
