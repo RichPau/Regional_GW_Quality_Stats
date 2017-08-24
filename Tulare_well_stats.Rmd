@@ -28,7 +28,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ##### All data cleaning, analysis, and mapping was carried out within R version 1.0.143.  
 
-##### All scripts, versions, data input files, and documentation for this model can be found in [this Github repository.](https://github.com/RichPau/Regional_GW_Quality_Stats)
+##### All scripts, versions, data input files, and documentation for this project can be found in [this Github repository.](https://github.com/RichPau/Regional_GW_Quality_Stats)
 
 ***
 
@@ -263,19 +263,6 @@ ggplot(boundary_dat) +
 
 ### Prepare Basemaps Maps for Next Sections
 ```{r, warning = FALSE, message = FALSE, results = "hide", error = FALSE}
-library(maps)
-library(mapdata)
-
-# create Tulare basin from the Fresno, Kern, Kings, and Tulare counties
-counties <- map_data("county")
-ca_county <- subset(counties, region == "california")
-tulare <- ca_county %>% 
-  filter(subregion %in% c('fresno', 'kern', 'kings', 'tulare'))
-
-center_coords <- tulare %>% 
-  group_by(subregion) %>% 
-  dplyr::summarise(lat = median(lat), long = median(long)) %>% 
-  mutate(county = c('Fresno', 'Kern', 'Kings', 'Tulare'))
 
 # create dataframe with coordinates for Fresno and Bakersfield, to act as markers
 cities <- data.frame(city = c('Fresno', 'Bakersfield', 'Visalia'),
@@ -283,35 +270,37 @@ cities <- data.frame(city = c('Fresno', 'Bakersfield', 'Visalia'),
                      latitude = c(36.7468, 35.3733, 36.3302)
                      )
 
-# load Bulletin 118 GW basin shapfiles
+# load Bulletin 118 GW basin shapefiles
 library(rgdal)
 library(maptools)
 filename <- "/Users/richpauloo/Documents/GitHub/Regional_GW_Quality_Stats/B118_GW_Basins/I08_B118_CA_GroundwaterBasins.shp"
 s <- shapefile(filename)
 
 # get tulare basin and other gw basins
-library(spdplyr)
+library(spdplyr) # load spdplyr for operating on spatial objects
 tulare_alluvial <- s %>% 
   filter(Basin_ID == '5-22') %>% 
   arrange(Basin_Subb)
-tulare_alluvial <- tulare_alluvial[8:14, ]
+tulare_alluvial <- tulare_alluvial[8:14, ] # subset for Tulare Basin subbasins
 
-# string of subbasin names for subsetting
+# string of subbasin names for subsetting for non-tulare basins
 sbs <- c(paste('5', paste('0', 1:9, sep=""), sep="-"), paste('5', 10:22, sep="-"))
 
 other_cv_basins <- s %>% 
   filter(Basin_ID %in% sbs & !is.na(Subbasin_N)) %>% 
   filter(Basin_Subb != '5-12.01' & Basin_Subb != '5-12.02' & Basin_Subb != '5-02.01' & Basin_Subb != '5-02.02' & Basin_Subb != '5-01.01' & Basin_Subb != '5-01.02')
 
-# projections....
+# define projections as NAD83
 tulare_alluvial <- spTransform(tulare_alluvial, CRS("+proj=longlat +ellps=GRS80 +datum=NAD83 +no_defs +towgs84=0,0,0"))
 other_cv_basins <- spTransform(other_cv_basins, CRS("+proj=longlat +ellps=GRS80 +datum=NAD83 +no_defs +towgs84=0,0,0"))
 
-# get California points from maps
+# get California polygon from maps library
+library(maps)
+library(mapdata)
 states <- map_data("state")
 ca_df <- subset(states, region == "california")
 
-# first plot the base
+# first plot the california base map
 ca_base <- ggplot(data = ca_df, mapping = aes(x = long, y = lat, group = group)) + 
   coord_fixed(1.3) + 
   geom_polygon(color = "black", fill = "white") +
@@ -319,11 +308,13 @@ ca_base <- ggplot(data = ca_df, mapping = aes(x = long, y = lat, group = group))
   geom_polygon(data = tulare_alluvial, fill = "cornsilk2", color = 'black') +
   theme_void()
 
+# now create the tulare base map to use in later maps
 tulare_base <- ggplot() + 
   coord_fixed(1.3) + 
   geom_polygon(data = tulare_alluvial, aes(x = long, y = lat, group = group), color = "black", fill = "cornsilk2") +
   theme_void()
 
+# create another tulare base map with cities for displaying now. later the cities will be layered after the points for readability.
 tulare_base_cities <- ggplot() + 
   coord_fixed(1.3) + 
   geom_polygon(data = tulare_alluvial, aes(x = long, y = lat, group = group), color = "black", fill = "cornsilk2") +
@@ -331,7 +322,7 @@ tulare_base_cities <- ggplot() +
   geom_text(data = cities, aes(x = longitude, y = latitude, label = city), vjust = 0, nudge_y = -0.1, nudge_x = -0.1) +
   theme_void()
 
-# pull out coords of tulare_alluvial for annotations
+# extract coords of tulare_alluvial for annotations
 tulare_coords <- tulare_alluvial@polygons[[2]]@Polygons[[1]]@coords
 min_x <- min(tulare_coords[,1])
 min_y <- min(tulare_coords[,2])
@@ -653,9 +644,14 @@ map_deep_discontinuous <- tulare_base +
 
 ***
 
-# Results
+# Results & Discussion
 
 ### Study Area
+##### The Tulare basin comprises Fresno, Kings, Kern, and Tualre county and covers 502,5110 acres (roughly 200,000 km$^2$) of the southern portion of California's Central Valley. The Tulare basin is an arid, agriculturally-dominated landscape, and heavily dependent on groundwater. Notable centers of high population density include the cities of Fresno, Visalia, and Bakersfield.
+
+***
+
+##### Figure 1: Study Area
 ```{r, warning = FALSE, message = FALSE, results = "hide", echo = FALSE}
 multiplot(ca_base, tulare_base_cities, cols = 2)
 ```
@@ -663,6 +659,13 @@ multiplot(ca_base, tulare_base_cities, cols = 2)
 ***
 
 ### Shallow Wells
+##### When depth information was not present, _Domestic_ and _Monitoring_ wells received a classification of "Shallow" (for a full description of well classification, see the Appendix). Not all wells came with a recorded depth. Of the 998 shallow wells in this study, roughly half (468) contained explicit depth information, and all of these wells with depth information came from the USGS database. These wells are shown in blue in Figure 2. 
+
+##### Shallow wells with depth data are well distributed spatially. They were mostly sampled during the period from 1980-2000, and have a mean depth of 67.67 ft., which agrees with the estimate of 60.95 ft., calculated with the Land Method [@Land1971] from a lognormal distribution fitted to these data. This analysis uses all 998 wells classified as "Shallow"; the separation of wells based on depth data served to estimate the mean depth of the wells for which depth data was present.
+
+***
+
+##### Figure 2: All Shallow Wells
 ```{r, warning = FALSE, message = FALSE, results = "hide", echo = FALSE}
 layout <- matrix(c(1, 2, 1, 3), nrow = 2, byrow = TRUE)
 multiplot(map_unique_shallow, p_unique_shallow, p_unique_shallow_with_depth, layout = layout)
@@ -672,16 +675,26 @@ multiplot(map_unique_shallow, p_unique_shallow, p_unique_shallow_with_depth, lay
 
 ***
 
-#### Shallow Wells with Continuous Data
+### Shallow Wells with Continuous Data
+##### _Continuous data_ was defined as a well having >= 25 observations, independent of time. That is to say, a well with 25 observations on a single day counted as a well with "continuous data". Only 52 wells offered continuous data, and these data offer poor spatial coverage. Within these wells, continuous data begins around 1983. From the 10-year time period between 2005-2014, where the data is clustered, average groundwater TDS in these wells increases by roughly 4,000 mg/L, although much greater changes in TDS are observed in some wells rather than others. This indicates that in some areas, groundwater quality deterioration proceeds at a higher rate than in others.
+
+***
+
+##### Figure 3: Shallow Wells with Continuous Data
 ```{r, warning = FALSE, message = FALSE, results = "hide", echo = FALSE}
 multiplot(map_shallow_continuous, p_shallow_continuous, cols = 2)
 ```
 
-###### **(a)** Unique shallow well observations with contnuous (>= 25 observations) data are well-dispersed spatially. **(b)** A smoothed regression through the continuous data in the time from 2005-2014, shows an increasing trend in regional GW TDS.
+###### **(a)** Unique shallow well observations with continuous (>= 25 observations) data are well-dispersed spatially. **(b)** A smoothed regression through the continuous data in the time from 2005-2014, shows an increasing trend in regional GW TDS.
 
 ***
 
-#### Shallow Wells with Continuous and Discontinuous Data
+### Shallow Wells with Continuous and Discontinuous Data
+##### Wells with discontinuous (< 25 observations) data make up the vast majority of the 998 Shallow Wells. They are well distributed spatially, and cluster between the dates of 1984-1993 and 1993-2014. Smoothed averages over these clusters of data show increases in TDS by roughly 5,000 and 2,000 mg/L TDS respectively. This increasing trend agrees with the data observed in continuous shallow well data.
+
+***
+
+##### Figure 4: Shallow Wells with Continuous and Discontinuous Data
 ```{r, warning = FALSE, message = FALSE, results = "hide", echo = FALSE}
 multiplot(map_shallow_discontinuous, p_shallow_discontinuous, cols = 2)
 ```
@@ -691,7 +704,13 @@ multiplot(map_shallow_discontinuous, p_shallow_discontinuous, cols = 2)
 ***
 
 ### Deep Wells
-##### Note the scale of the y axis between the shallow and deep wells varies by an order of magnitude.
+##### In the absence of depth data, _Irrigation_, _Industrial_, and _Municipal Supply Wells_ were given a classification of "Deep" (for more detail on depth classification, see the Appendix). 616 of the 2,776 Deep Wells came from the USGS database, and thus contained depth information. These deep wells are well-distributed and their mean depth is calculated as 653.81 ft, which agrees with the estimate from a lognormal distribution model of 671.61 feet.
+
+##### Note the scale of the y axis between the shallow and deep wells varies by an order of magnitude. Inorganic water quality is generally better in deep wells, although the continuous and discontinuous deep well data suggests it declines in inorganic water quality.
+
+***
+
+##### Figure 5: All Deep Wells
 ```{r, warning = FALSE, message = FALSE, results = "hide", echo = FALSE}
 multiplot(map_unique_deep, p_unique_deep, p_unique_deep_with_depth, layout = layout)
 ```
@@ -700,7 +719,13 @@ multiplot(map_unique_deep, p_unique_deep, p_unique_deep_with_depth, layout = lay
 
 ***
 
-#### Deep Wells with Continuous Data
+### Deep Wells with Continuous Data
+##### Like shallow wells, deep wells with continuous data are not very well-distributed, highlighting the lack of robust water quality data in the region. 118 deep wells offer continuous data. Nonetheless, these continuous data offer greater temporal coverage than shallow well data (the result of municipal supply well sampling protocol) and show a clear increasing signal from the period between 1980-2014 (Figure 6).
+
+
+***
+
+##### Figure 6: Deep Wells with Continuous Data
 ```{r, warning = FALSE, message = FALSE, results = "hide", echo = FALSE}
 multiplot(map_deep_continuous, p_deep_continuous, cols = 2)
 ```
@@ -709,7 +734,12 @@ multiplot(map_deep_continuous, p_deep_continuous, cols = 2)
 
 ***
 
-#### Deep Wells with Continuous and Discontinuous Data
+### Deep Wells with Continuous and Discontinuous Data
+##### When discontinuous data is considered, spatial coverage of deep wells vastly increases. Deep wells are clustered around the urban centers of Fresno, Visalia and Bakersfield which is unsurprising, as industrial, agricultural, and notably, municipal supply water use converges on these urban loci The data temporally clusters around sampling events, and average groundwater TDS tends to increase from 1970-2014.
+
+***
+
+##### Figure 6: Deep Wells with Continuous Data
 ```{r, warning = FALSE, message = FALSE, results = "hide", echo = FALSE}
 multiplot(map_deep_discontinuous, p_deep_discontinuous, cols = 2)
 ```
