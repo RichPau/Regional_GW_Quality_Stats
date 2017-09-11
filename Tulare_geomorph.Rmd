@@ -1,0 +1,63 @@
+---
+title: "Tulare_geomorph"
+author: "Rich Pauloo"
+date: "9/8/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Set wd, loda packages
+```{r}
+setwd("/Users/richpauloo/Documents/GitHub/Regional_GW_Quality_Stats")
+
+packages <- list('tidyverse', 'geosphere','maptools', 'rgdal','maptools','spdplyr','raster', 'polyclip', 'broom', 'sp', 'rgeos')
+lapply(packages, library, character.only = TRUE)
+```
+
+## Bring in data
+```{r}
+# data on geomorphological characteristics for California. Zone indicates geomorphology
+geomorphology <- "/Users/richpauloo/Documents/GitHub/Regional_GW_Quality_Stats/geomorphology/geomorphology.shp"
+geo <- shapefile(geomorphology)
+plot(geo)
+
+tulare_union <- "/Users/richpauloo/Documents/GitHub/Regional_GW_Quality_Stats/tulare_union.shp"
+tulare <- shapefile(tulare_union)
+plot(tulare)
+
+# check projections are the same, and if not transform them
+proj4string(geo)
+proj4string(tulare)
+
+# projections are not the same. transform them with spTransform
+geo_proj <- spTransform(geo, CRS("+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0"))
+proj4string(geo_proj)
+
+```
+
+## Clip geomorphology to tulare_union
+```{r}
+# use gIntersection, which takes SpatialPolygons objects
+
+# create SpatialPolygons objects
+class(geo_proj)
+geo_proj_sp <- as(geo_proj, "SpatialPolygons")
+tulare_sp <- as(tulare, "SpatialPolygons")
+class(geo_proj_sp)
+class(tulare_sp)
+
+# visualizev 
+plot(geo_proj_sp)
+plot(tulare_sp)
+
+# clip
+clip <- gIntersection(geo_proj_sp, tulare_sp, byid = TRUE, drop_lower_td = TRUE)
+plot(clip)
+class(clip)
+
+
+```
+
