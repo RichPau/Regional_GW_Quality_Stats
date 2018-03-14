@@ -46,7 +46,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ### Load Data and Required Packages
 ```{r set wd, load required packages, and load data, warning = FALSE, messages = FALSE, results="hide", errors = FALSE}
 #setwd("E:/rpauloo/Documents/GitHub/Contaminant-Mapping")
-setwd("/Users/richpauloo/Documents/GitHub/Regional_GW_Quality_Stats")
+#setwd("/Users/richpauloo/Documents/GitHub/Regional_GW_Quality_Stats")
 
 required.packages <- c("sp", "XML", "rgdal", "rgeos", "raster", "ggplot2", 
                        "dismo", "leaflet", "RColorBrewer", "classInt", "dplyr", 
@@ -388,8 +388,7 @@ cities <- data.frame(city = c('Fresno', 'Bakersfield', 'Visalia'),
 # load Bulletin 118 GW basin shapefiles
 library(rgdal)
 library(maptools)
-filename <- "/Users/richpauloo/Documents/GitHub/Regional_GW_Quality_Stats/B118_GW_Basins/I08_B118_CA_GroundwaterBasins.shp"
-s <- shapefile(filename)
+s <- shapefile(file.path(PROJHOME, 'shapefiles','I08_B118_CA_GroundwaterBasins.shp'))
 
 # get tulare basin and other gw basins
 library(spdplyr) # load spdplyr for operating on spatial objects
@@ -429,7 +428,7 @@ tulare_union_spdf <- as(tulare_union, "SpatialPolygonsDataFrame")
 # get California polygon from maps library
 library(maps)
 library(mapdata)
-states <- map_data("state")
+states <- ggplot2::map_data("state")
 ca_df <- subset(states, region == "california")
 
 # first plot the california base map
@@ -462,8 +461,9 @@ min_y <- min(tulare_coords[,2])
 
 
 # with cowplot
+library(cowplot)
 map_base_inset <- ggdraw() +
-  draw_plot(tulare_base_cities) +
+  draw_plot(tulare_base) +
   draw_plot(ca_base, 0.05, 0.1, 0.4, 0.4)
 
 # state of CA normal size
